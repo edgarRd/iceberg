@@ -28,13 +28,12 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.JobContext;
-import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.StatusReporter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 import org.apache.iceberg.data.Record;
+import org.apache.iceberg.mr.IcebergMapReduceUtils;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.mr.mapreduce.IcebergSplit;
 import org.apache.iceberg.mr.mapreduce.IcebergSplitContainer;
@@ -65,7 +64,7 @@ public class MapredIcebergInputFormat<T> implements InputFormat<Void, Container<
 
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
-    return innerInputFormat.getSplits(newJobContext(job))
+    return innerInputFormat.getSplits(IcebergMapReduceUtils.newJobContext(job))
                            .stream()
                            .map(InputSplit.class::cast)
                            .toArray(InputSplit[]::new);
@@ -144,13 +143,6 @@ public class MapredIcebergInputFormat<T> implements InputFormat<Void, Container<
         innerReader.close();
       }
     }
-  }
-
-  private static JobContext newJobContext(JobConf job) {
-    JobID jobID = Optional.ofNullable(JobID.forName(job.get(JobContext.ID)))
-                          .orElseGet(JobID::new);
-
-    return new JobContextImpl(job, jobID);
   }
 
   private static TaskAttemptContext newTaskAttemptContext(JobConf job, Reporter reporter) {

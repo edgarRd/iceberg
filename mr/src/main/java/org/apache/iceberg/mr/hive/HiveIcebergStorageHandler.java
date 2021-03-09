@@ -25,8 +25,11 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.HiveMetaHook;
+import org.apache.hadoop.hive.ql.exec.TableScanOperator;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.HiveStorageHandler;
 import org.apache.hadoop.hive.ql.metadata.HiveStoragePredicateHandler;
+import org.apache.hadoop.hive.ql.metadata.InputEstimator;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
@@ -36,6 +39,8 @@ import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputFormat;
+import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.Schema;
@@ -45,6 +50,7 @@ import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
 import org.apache.iceberg.mr.Catalogs;
+import org.apache.iceberg.mr.IcebergMapReduceUtils;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.relocated.com.google.common.annotations.VisibleForTesting;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
@@ -56,7 +62,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.WRITE_TARGET_FILE_SIZE_BYTES;
 import static org.apache.iceberg.TableProperties.WRITE_TARGET_FILE_SIZE_BYTES_DEFAULT;
 
-public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, HiveStorageHandler {
+public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, HiveStorageHandler, InputEstimator {
 
   static final String WRITE_KEY = "HiveIcebergStorageHandler_write";
 
@@ -249,5 +255,27 @@ public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, H
     // save schema into table props as well to avoid repeatedly hitting the HMS during serde initializations
     // this is an exception to the interface documentation, but it's a safe operation to add this property
     props.put(InputFormatConfig.TABLE_SCHEMA, schemaJson);
+  }
+
+  @Override
+  public Estimation estimate(JobConf job, TableScanOperator ts, long remaining) throws HiveException {
+    long sizeInBytes = 0L;
+    long numRows = 0L;
+
+    for (CombinedScanTask task : IcebergMapReduceUtils.tasks(IcebergMapReduceUtils.configureScan(job))) {
+      for (FileScanTask file : task.files()) {
+        sizeInBytes += file.length();
+        numRows += file.file().recordCount();
+
+        if (remaining > 0 && remaining - sizeInBytes < 0) {
+          // Check for early exit condition (from Hive's InputEstimator javadoc):
+          // If it (remaining) has positive value, further estimation can be canceled on the point of exceeding it.
+          // In this case, return any bigger length value than this (Long.MAX_VALUE, for example).
+          return new Estimation(Integer.MAX_VALUE, Long.MAX_VALUE);
+        }
+      }
+    }
+
+    return new Estimation((int) numRows, sizeInBytes);
   }
 }

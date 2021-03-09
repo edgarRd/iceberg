@@ -23,53 +23,27 @@ import java.io.IOException;
 import java.util.Arrays;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-import org.apache.hadoop.hive.ql.io.sarg.ConvertAstToSearchArg;
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
-import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
-import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.iceberg.data.Record;
-import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.mr.IcebergMapReduceUtils;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.mr.mapred.Container;
 import org.apache.iceberg.mr.mapred.MapredIcebergInputFormat;
 import org.apache.iceberg.mr.mapreduce.IcebergSplit;
-import org.apache.iceberg.util.SerializationUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
                                     implements CombineHiveInputFormat.AvoidSplitCombination {
 
-  private static final Logger LOG = LoggerFactory.getLogger(HiveIcebergInputFormat.class);
-
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     // Convert Hive filter to Iceberg filter
-    String hiveFilter = job.get(TableScanDesc.FILTER_EXPR_CONF_STR);
-    if (hiveFilter != null) {
-      ExprNodeGenericFuncDesc exprNodeDesc = SerializationUtilities
-              .deserializeObject(hiveFilter, ExprNodeGenericFuncDesc.class);
-      SearchArgument sarg = ConvertAstToSearchArg.create(job, exprNodeDesc);
-      try {
-        Expression filter = HiveIcebergFilterFactory.generateFilterExpression(sarg);
-        job.set(InputFormatConfig.FILTER_EXPRESSION, SerializationUtil.serializeToBase64(filter));
-      } catch (UnsupportedOperationException e) {
-        LOG.warn("Unable to create Iceberg filter, continuing without filter (will be applied by Hive later): ", e);
-      }
-    }
-
-    String[] selectedColumns = ColumnProjectionUtils.getReadColumnNames(job);
-    job.setStrings(InputFormatConfig.SELECTED_COLUMNS, selectedColumns);
-
     String location = job.get(InputFormatConfig.TABLE_LOCATION);
-    return Arrays.stream(super.getSplits(job, numSplits))
+    return Arrays.stream(super.getSplits(IcebergMapReduceUtils.configureScan(job), numSplits))
                  .map(split -> new HiveIcebergSplit((IcebergSplit) split, location))
                  .toArray(InputSplit[]::new);
   }

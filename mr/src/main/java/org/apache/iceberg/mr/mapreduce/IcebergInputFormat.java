@@ -40,11 +40,8 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.TableProperties;
-import org.apache.iceberg.TableScan;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.data.DeleteFilter;
 import org.apache.iceberg.data.GenericDeleteFilter;
@@ -62,7 +59,7 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
-import org.apache.iceberg.mr.Catalogs;
+import org.apache.iceberg.mr.IcebergMapReduceUtils;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.parquet.Parquet;
@@ -71,7 +68,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.util.PartitionUtil;
-import org.apache.iceberg.util.SerializationUtil;
 
 /**
  * Generic Mrv2 InputFormat API for Iceberg.
@@ -93,57 +89,22 @@ public class IcebergInputFormat<T> extends InputFormat<Void, T> {
   @Override
   public List<InputSplit> getSplits(JobContext context) {
     Configuration conf = context.getConfiguration();
-    Table table;
-    if (conf.get(InputFormatConfig.SERIALIZED_TABLE) != null) {
-      table = SerializationUtil.deserializeFromBase64(conf.get(InputFormatConfig.SERIALIZED_TABLE));
-    } else {
-      table = Catalogs.loadTable(conf);
-    }
-
-    TableScan scan = table.newScan()
-            .caseSensitive(conf.getBoolean(InputFormatConfig.CASE_SENSITIVE, InputFormatConfig.CASE_SENSITIVE_DEFAULT));
-    long snapshotId = conf.getLong(InputFormatConfig.SNAPSHOT_ID, -1);
-    if (snapshotId != -1) {
-      scan = scan.useSnapshot(snapshotId);
-    }
-    long asOfTime = conf.getLong(InputFormatConfig.AS_OF_TIMESTAMP, -1);
-    if (asOfTime != -1) {
-      scan = scan.asOfTime(asOfTime);
-    }
-    long splitSize = conf.getLong(InputFormatConfig.SPLIT_SIZE, 0);
-    if (splitSize > 0) {
-      scan = scan.option(TableProperties.SPLIT_SIZE, String.valueOf(splitSize));
-    }
-    String schemaStr = conf.get(InputFormatConfig.READ_SCHEMA);
-    if (schemaStr != null) {
-      scan.project(SchemaParser.fromJson(schemaStr));
-    }
-    String[] selectedColumns = conf.getStrings(InputFormatConfig.SELECTED_COLUMNS);
-    if (selectedColumns != null) {
-      scan.select(selectedColumns);
-    }
-
-    // TODO add a filter parser to get rid of Serialization
-    Expression filter = SerializationUtil.deserializeFromBase64(conf.get(InputFormatConfig.FILTER_EXPRESSION));
-    if (filter != null) {
-      scan = scan.filter(filter);
-    }
-
+    Table table = IcebergMapReduceUtils.deserializeTable(conf);
     List<InputSplit> splits = Lists.newArrayList();
     boolean applyResidual = !conf.getBoolean(InputFormatConfig.SKIP_RESIDUAL_FILTERING, false);
     InputFormatConfig.InMemoryDataModel model = conf.getEnum(InputFormatConfig.IN_MEMORY_DATA_MODEL,
         InputFormatConfig.InMemoryDataModel.GENERIC);
-    try (CloseableIterable<CombinedScanTask> tasksIterable = scan.planTasks()) {
+    try (CloseableIterable<CombinedScanTask> tasksIterable = IcebergMapReduceUtils.tasks(context)) {
       tasksIterable.forEach(task -> {
         if (applyResidual && (model == InputFormatConfig.InMemoryDataModel.HIVE ||
             model == InputFormatConfig.InMemoryDataModel.PIG)) {
           // TODO: We do not support residual evaluation for HIVE and PIG in memory data model yet
           checkResiduals(task);
         }
-        splits.add(new IcebergSplit(conf, task, table.io(), table.encryption()));
+        splits.add(IcebergSplit.newInstance(conf, task, table.io(), table.encryption()));
       });
     } catch (IOException e) {
-      throw new UncheckedIOException(String.format("Failed to close table scan: %s", scan), e);
+      throw new UncheckedIOException("Failed to close table scan", e);
     }
 
     return splits;
