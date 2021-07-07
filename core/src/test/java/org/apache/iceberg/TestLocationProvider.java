@@ -212,4 +212,18 @@ public class TestLocationProvider extends TableTestBase {
         () -> table.locationProvider()
     );
   }
+
+  @Test
+  public void testObjectStoreEnabledLocationProvider() {
+    this.table.updateProperties()
+        .set(TableProperties.OBJECT_STORE_ENABLED, "true")
+        .commit();
+
+    AssertHelpers.assertThrows("Enabling object store support without object storage path should fail",
+        IllegalArgumentException.class,
+        String.format("Table property '%s' must be present when enabling object storage support.",
+            TableProperties.OBJECT_STORE_PATH),
+        () -> table.locationProvider()
+    );
+  }
 }

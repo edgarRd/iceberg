@@ -96,6 +96,8 @@ public class LocationProviders {
     private final String context;
 
     ObjectStoreLocationProvider(String tableLocation, Map<String, String> properties) {
+      Preconditions.checkArgument(properties.containsKey(OBJECT_STORE_PATH),
+          "Table property '%s' must be present when enabling object storage support.", OBJECT_STORE_PATH);
       this.storageLocation = stripTrailingSlash(properties.get(OBJECT_STORE_PATH));
       this.context = pathContext(tableLocation);
     }
