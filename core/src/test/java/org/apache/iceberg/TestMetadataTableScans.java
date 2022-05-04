@@ -402,7 +402,8 @@ public class TestMetadataTableScans extends TableTestBase {
 
     Expression andEquals = Expressions.and(
         Expressions.equal("partition.data_bucket", 0),
-        Expressions.greaterThan("record_count", 0));
+        Expressions.greaterThan("record_count", 0),
+        Expressions.greaterThan("size_in_bytes", 0));
     TableScan scanAndEq = partitionsTable.newScan().filter(andEquals);
     CloseableIterable<FileScanTask> tasksAndEq = PartitionsTable.planFiles((StaticTableScan) scanAndEq);
     Assert.assertEquals(1, Iterators.size(tasksAndEq.iterator()));
@@ -417,7 +418,8 @@ public class TestMetadataTableScans extends TableTestBase {
 
     Expression ltAnd = Expressions.and(
         Expressions.lessThan("partition.data_bucket", 2),
-        Expressions.greaterThan("record_count", 0));
+        Expressions.greaterThan("record_count", 0),
+        Expressions.greaterThan("size_in_bytes", 0));
     TableScan scanLtAnd = partitionsTable.newScan().filter(ltAnd);
     CloseableIterable<FileScanTask> tasksLtAnd = PartitionsTable.planFiles((StaticTableScan) scanLtAnd);
     Assert.assertEquals(2, Iterators.size(tasksLtAnd.iterator()));
@@ -436,6 +438,17 @@ public class TestMetadataTableScans extends TableTestBase {
         Expressions.greaterThan("record_count", 0));
     TableScan scanOr = partitionsTable.newScan().filter(or);
     CloseableIterable<FileScanTask> tasksOr = PartitionsTable.planFiles((StaticTableScan) scanOr);
+    Assert.assertEquals(4, Iterators.size(tasksOr.iterator()));
+    validateIncludesPartitionScan(tasksOr, 0);
+    validateIncludesPartitionScan(tasksOr, 1);
+    validateIncludesPartitionScan(tasksOr, 2);
+    validateIncludesPartitionScan(tasksOr, 3);
+
+    or = Expressions.or(
+        Expressions.equal("partition.data_bucket", 2),
+        Expressions.greaterThan("size_in_bytes", 0));
+    scanOr = partitionsTable.newScan().filter(or);
+    tasksOr = PartitionsTable.planFiles((StaticTableScan) scanOr);
     Assert.assertEquals(4, Iterators.size(tasksOr.iterator()));
     validateIncludesPartitionScan(tasksOr, 0);
     validateIncludesPartitionScan(tasksOr, 1);

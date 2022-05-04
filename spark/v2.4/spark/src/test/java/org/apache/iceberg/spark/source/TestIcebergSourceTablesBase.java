@@ -1050,7 +1050,8 @@ public abstract class TestIcebergSourceTablesBase extends SparkTestBase {
 
     Types.StructType expectedSchema = Types.StructType.of(
         required(2, "record_count", Types.LongType.get()),
-        required(3, "file_count", Types.IntegerType.get()));
+        required(3, "file_count", Types.IntegerType.get()),
+        required(5, "size_in_bytes", Types.LongType.get()));
 
     Table partitionsTable = loadTable(tableIdentifier, "partitions");
 
@@ -1059,17 +1060,20 @@ public abstract class TestIcebergSourceTablesBase extends SparkTestBase {
 
     GenericRecordBuilder builder = new GenericRecordBuilder(AvroSchemaUtil.convert(
         partitionsTable.schema(), "partitions"));
-    GenericData.Record expectedRow = builder
-        .set("record_count", 1L)
-        .set("file_count", 1)
-        .build();
 
     List<Row> actual = spark.read()
         .format("iceberg")
         .load(loadLocation(tableIdentifier, "partitions"))
         .collectAsList();
-
     Assert.assertEquals("Unpartitioned partitions table should have one row", 1, actual.size());
+
+    Row actualRow = actual.get(0);
+    Assert.assertEquals("Unpartitioned partitions table result should have three columns", 3, actualRow.size());
+    GenericData.Record expectedRow = builder
+        .set("record_count", 1L)
+        .set("file_count", 1)
+        .set("size_in_bytes", actualRow.getLong(2))
+        .build();
     TestHelpers.assertEqualsSafe(expectedSchema, expectedRow, actual.get(0));
   }
 
@@ -1100,6 +1104,7 @@ public abstract class TestIcebergSourceTablesBase extends SparkTestBase {
         .load(loadLocation(tableIdentifier, "partitions"))
         .orderBy("partition.id")
         .collectAsList();
+    Assert.assertEquals("Partitions table should have two rows", 2, actual.size());
 
     GenericRecordBuilder builder = new GenericRecordBuilder(AvroSchemaUtil.convert(
         partitionsTable.schema(), "partitions"));
@@ -1111,16 +1116,17 @@ public abstract class TestIcebergSourceTablesBase extends SparkTestBase {
         .set("record_count", 1L)
         .set("file_count", 1)
         .set("spec_id", 0)
+        .set("size_in_bytes", actual.get(0).getLong(4))
         .build());
     expected.add(builder
         .set("partition", partitionBuilder.set("id", 2).build())
         .set("record_count", 1L)
         .set("file_count", 1)
         .set("spec_id", 0)
+        .set("size_in_bytes", actual.get(1).getLong(4))
         .build());
 
-    Assert.assertEquals("Partitions table should have two rows", 2, expected.size());
-    Assert.assertEquals("Actual results should have two rows", 2, actual.size());
+    Assert.assertEquals("Actual results should have two rows", expected.size(), actual.size());
     for (int i = 0; i < 2; i += 1) {
       TestHelpers.assertEqualsSafe(partitionsTable.schema().asStruct(), expected.get(i), actual.get(i));
     }
