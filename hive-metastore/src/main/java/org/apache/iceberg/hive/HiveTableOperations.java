@@ -396,7 +396,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     if (updateHiveTable) {
       metaClients.run(
           client -> {
-            MetastoreUtil.alterTable(client, database, tableName, hmsTable);
+            HiveClientUtil.alterTable(client, database, tableName, hmsTable);
             return null;
           });
     } else {

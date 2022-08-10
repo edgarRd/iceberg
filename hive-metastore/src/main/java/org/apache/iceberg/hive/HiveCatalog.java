@@ -239,7 +239,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements SupportsNamespa
 
       clients.run(
           client -> {
-            MetastoreUtil.alterTable(client, fromDatabase, fromName, table);
+            HiveClientUtil.alterTable(client, fromDatabase, fromName, table);
             return null;
           });
 

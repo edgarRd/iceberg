@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 
-public class MetastoreUtil {
+public class HiveClientUtil {
 
   private static final DynMethods.UnboundMethod ALTER_TABLE =
       DynMethods.builder("alter_table")
@@ -46,7 +46,7 @@ public class MetastoreUtil {
           .impl(IMetaStoreClient.class, "alter_table", String.class, String.class, Table.class)
           .build();
 
-  private MetastoreUtil() {}
+  private HiveClientUtil() {}
 
   /**
    * Calls alter_table method using the metastore client. If possible, an environmental context will
