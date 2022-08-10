@@ -42,7 +42,7 @@ import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.hadoop.ConfigProperties;
 import org.apache.iceberg.hive.HiveSchemaUtil;
-import org.apache.iceberg.hive.MetastoreUtil;
+import org.apache.iceberg.hive.HiveVersions;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.mr.TestHelper;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
@@ -127,7 +127,7 @@ public class TestHiveIcebergStorageHandlerWithEngine {
           // test for vectorization=ON in case of ORC format and Tez engine
           if ((fileFormat == FileFormat.PARQUET || fileFormat == FileFormat.ORC)
               && "tez".equals(engine)
-              && MetastoreUtil.hive3PresentOnClasspath()) {
+              && HiveVersions.hive3PresentOnClasspath()) {
             testParams.add(
                 new Object[] {fileFormat, engine, TestTables.TestTableType.HIVE_CATALOG, true});
           }
