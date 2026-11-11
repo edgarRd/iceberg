@@ -103,6 +103,7 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
   private final JavaSparkContext sparkContext;
   private final Table table;
   private final Supplier<FileIO> fileIO;
+  private final SparkScanBroadcasts broadcasts;
   private final SparkSession spark;
   private final SparkReadConf readConf;
   private final boolean caseSensitive;
@@ -129,6 +130,7 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
     this.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
     this.table = table;
     this.fileIO = fileIO;
+    this.broadcasts = new SparkScanBroadcasts(sparkContext, table, fileIO);
     this.readConf = readConf;
     this.caseSensitive = readConf.caseSensitive();
     this.expectedSchema = expectedSchema;
@@ -166,9 +168,9 @@ abstract class SparkScan implements Scan, SupportsReportStatistics {
   @Override
   public Batch toBatch() {
     return new SparkBatch(
-        sparkContext,
         table,
         fileIO,
+        broadcasts,
         readConf,
         groupingKeyType(),
         taskGroups(),
